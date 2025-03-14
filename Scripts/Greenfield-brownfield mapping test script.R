@@ -52,20 +52,19 @@ path <- "/conf/LIST_analytics/Lanarkshire/Documentation/James/Mapping for Ruth/m
 greenbelt <- read_sf(paste0(path, "Green_Belt_-_Scotland/pub_grnblt.shp")) %>% 
   filter(str_detect(local_auth, "Lanarkshire")) %>%  # Filtering for necessary data only
   st_transform(4326) %>% 
-  dplyr::select(local_auth) %>% # Selecting key variables only
   mutate(colour = "green") # Adding colour variable for mapping
 
 brownfield <- read_sf(paste0(path, "Vacant_and_Derelict_Land_-_Scotland/pub_vdlPolygon.shp")) %>% 
   filter(str_detect(local_auth, "Lanarkshire")) %>%  # Filtering for necessary data only
   st_transform(4326) %>% 
-  dplyr::select(local_auth)%>% 
-  mutate(colour = "brown")
+  mutate(colour = "brown",
+         site_name = str_to_sentence(site_name))
 
 rm(path)
 
 
 
-population_density <- read_sf("/conf/linkage/output//lookups/Unicode/Geography/Shapefiles/SG_DataZoneCent_2011/SG_DataZone_Cent_2011.shp") %>% 
+population_density <- read_sf("/conf/linkage/output/lookups/Unicode/Geography/Shapefiles/Data Zones 2011/SG_DataZone_Bdry_2011.shp") %>% 
   janitor::clean_names() %>% 
   dplyr::select(data_zone, tot_pop2011) %>% 
   st_transform(4326) %>% 
@@ -98,37 +97,37 @@ leaflet() %>%
   addPolygons(data = greenbelt,
               fillColor = "green",
               weight = 1,
-              color = "green",
-              group = "Land use") %>% 
+              color = "black",
+              group = "Greenfield sites",
+              popup = ~paste0(local_auth)) %>% 
   addPolygons(data = brownfield,
               fillColor = "brown",
               weight = 1,
-              color = "brown",
-              group = "Land use") %>% 
+              color = "black",
+              group = "Vacant or derelict land",
+              popup = ~paste0(local_auth, ": ", site_name)) %>% 
   addPolygons(data = population_density,
               fillColor = ~pal_1(tot_pop2011),
               weight = 1,
               color = "black",
-              group = "Population estimates") %>%
+              group = "Population estimates",
+              popup = ~paste0("Total population: ", tot_pop2011)) %>%
   addPolygons(data = population_density,
               fillColor = ~pal_2(ur8_2020_name),
               weight = 1,
               color = "black",
-              group = "Urbanity") %>%
+              group = "Urbanity",
+              popup = ~paste0("Area classification: ", ur8_2020_name)) %>%
   addLegend(position = "bottomleft", 
             title = "Site type",
             colors = c("green", "brown"), 
             labels = c("Greenfield", "Brownfield"),
             group = "Land use") %>%
-  addLegend(pal = pal,
-            position = "bottomleft", 
-            title = "Urbanity",
-            labels = population_density$ur8_2020_name,
-            group = "Urbanity") %>%
   addLayersControl(
-    overlayGroups = c("Land use", "Population estiamtes", "Urbanity"),
+    baseGroups = c("Greenfield sites", "Vacant or derelict land", "Population estimates", "Urbanity"),
     options = layersControlOptions(collapsed = FALSE)
   )
+
 
 
 ### END OF SCRIPT ###
