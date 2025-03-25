@@ -9,7 +9,7 @@ library(tidyverse)
 library(leaflet) # Creating map
 library(sf) # Reading shape files
 library(RColorBrewer) # colour palette
- 
+
 # 2 Importing shapefile data ----------------------------------------------
 
 # greenbelt shapefiles
@@ -24,7 +24,7 @@ vdl <- read_sf(paste0("Greenbelt data/", "Vacant_and_Derelict_Land_-_Scotland/pu
   st_transform(4326) %>% 
   mutate(colour = case_when(site_type == "Derelict" ~ "brown",
                             site_type == "Vacant Land" ~ "grey"),
-    site_name = str_to_sentence(site_name))
+         site_name = str_to_sentence(site_name))
 
 # Greenfiled/Brownfield status - housing & land supply
 housing_land <- read_sf("/conf/LIST_analytics/West Hub/Geospatial Cross Team/Projects/Housing Land Supply/HLAA2019_GCV.shp") %>%
@@ -40,7 +40,7 @@ population_density <- read_sf("/conf/linkage/output/lookups/Unicode/Geography/Sh
   filter(hscp2019 %in% c("S37000028", "S37000035")) %>%
   st_transform(4326) %>% 
   
-# add most recent pop estimates
+  # add most recent pop estimates
   left_join(
     phsopendata::get_resource("c505f490-c201-44bd-abd1-1bd7a64285ee") %>% 
       janitor::clean_names() %>% 
@@ -48,16 +48,17 @@ population_density <- read_sf("/conf/linkage/output/lookups/Unicode/Geography/Sh
       dplyr::select(data_zone, pop_year = year, all_ages),
     
     by = "data_zone") %>%  # end of left_join() call
-
-# add urban-rural classification
+  
+  # add urban-rural classification
   left_join(read_rds("/conf/linkage/output/lookups/Unicode/Geography/Urban Rural Classification/DataZone2011_urban_rural_2020v2.rds") %>% 
               janitor::clean_names() %>% 
               dplyr::select(data_zone = datazone2011, ur8_2020_name),
             
             by = "data_zone") %>%
   
-# calculate population density
-  mutate(pop_density = all_ages/std_area_km2)
+  # calculate population density
+  mutate(pop_density = all_ages/std_area_km2,
+         pop_density_log = log(all_ages/std_area_km2))
 
 # rural dataset with combined polygons for each classification 
 rurality <- population_density %>%
@@ -73,7 +74,7 @@ rurality <- population_density %>%
 
 # Define colour palettes
 #pal_1 <- colorBin(bin_colours, population_density$pop_density, bins = 7, pretty = T)
-pal_1 <- colorNumeric("magma", population_density$pop_density)
+pal_1 <- colorNumeric("magma", population_density$pop_density_log)
 pal_2 <- colorFactor("magma", population_density$ur8_2020_name)
 
 # Greenbelt map
@@ -82,6 +83,7 @@ leaflet() %>%
   addPolygons(data = greenbelt,
               fillColor = "green",
               weight = 1,
+              opacity = 0.75,
               color = "black") %>%
   addLegend(position = "bottomleft", 
             title = "Green Belt",
@@ -95,6 +97,7 @@ leaflet() %>%
   addPolygons(data = vdl,
               fillColor = ~colour,
               weight = 1,
+              opacity = 0.75,
               color = "black") %>%
   addLegend(position = "bottomleft", 
             title = "Vacant and Derelict Land",
@@ -107,6 +110,7 @@ leaflet() %>%
   addPolygons(data = housing_land,
               fillColor = ~devtype2,
               weight = 1,
+              opacity = 0.75,
               color = "black") %>%
   addLegend(position = "bottomleft", 
             title = "Greenfield/Brownfield status",
@@ -118,19 +122,19 @@ leaflet() %>%
 leaflet() %>% 
   addTiles() %>% 
   addPolygons(data = population_density,
-              fillColor = ~pal_1(pop_density),
+              fillColor = ~pal_1(pop_density_log),
               fillOpacity = 0.6,
               smoothFactor = 0.1, # better accuracy to avoid "gaps" between polygons when zoomed out
               stroke = F, # this removes borderlines around polygons
               weight = 1
-              ) %>%
+  ) %>%
   addLegend(data = population_density,
             position = "bottomleft", 
-            title = "Population density (pop/km2)",
+            title = "Relative population density",
             pal = pal_1,
-            values = ~pop_density) 
+            values = ~pop_density_log) 
 
-  
+
 # Rurality
 leaflet() %>% 
   addTiles() %>%   
