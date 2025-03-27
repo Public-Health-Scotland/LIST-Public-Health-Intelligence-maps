@@ -75,7 +75,7 @@ rurality <- population_density %>%
 # Define colour palettes
 #pal_1 <- colorBin(bin_colours, population_density$pop_density, bins = 7, pretty = T)
 pal_1 <- colorNumeric("magma", population_density$pop_density_log)
-pal_2 <- colorFactor("magma", population_density$ur8_2020_name)
+pal_2 <- rev(colorFactor("magma", population_density$ur8_2020_name)) # Reverse colour scheme to match population density
 
 # Greenbelt map
 leaflet() %>% 
@@ -85,6 +85,8 @@ leaflet() %>%
               weight = 1,
               opacity = 0.75,
               color = "black") %>%
+  addProviderTiles(providers$OpenRailwayMap) |> # Adding routes layer
+  addProviderTiles(providers$CyclOSM) |> # Adding rotues layer
   addLegend(position = "bottomleft", 
             title = "Green Belt",
             colors = c("green"), 
@@ -99,6 +101,8 @@ leaflet() %>%
               weight = 1,
               opacity = 0.75,
               color = "black") %>%
+  addProviderTiles(providers$OpenRailwayMap) |> # Adding rotues layer
+  addProviderTiles(providers$CyclOSM) |> # Adding rotues layer
   addLegend(position = "bottomleft", 
             title = "Vacant and Derelict Land",
             colors = c("grey", "brown"), 
@@ -112,6 +116,8 @@ leaflet() %>%
               weight = 1,
               opacity = 0.75,
               color = "black") %>%
+  addProviderTiles(providers$OpenRailwayMap) |> # Adding rotues layer
+  addProviderTiles(providers$CyclOSM) |> # Adding rotues layer
   addLegend(position = "bottomleft", 
             title = "Greenfield/Brownfield status",
             colors = c("green", "brown"), 
@@ -123,11 +129,12 @@ leaflet() %>%
   addTiles() %>% 
   addPolygons(data = population_density,
               fillColor = ~pal_1(pop_density_log),
-              fillOpacity = 0.6,
+              fillOpacity = 0.2, # Adjusting opacity with new routes layers
               smoothFactor = 0.1, # better accuracy to avoid "gaps" between polygons when zoomed out
               stroke = F, # this removes borderlines around polygons
-              weight = 1
-  ) %>%
+              weight = 1) %>%
+  addProviderTiles(providers$OpenRailwayMap) |> # Adding rotues layer
+  addProviderTiles(providers$CyclOSM) |> # Adding rotues layer
   addLegend(data = population_density,
             position = "bottomleft", 
             title = "Relative population density",
@@ -140,9 +147,11 @@ leaflet() %>%
   addTiles() %>%   
   addPolygons(data = rurality,
               fillColor = ~pal_2(ur8_2020_name),
-              fillOpacity = 0.5,
+              fillOpacity = 0.2, # Adjusting opacity with new routes layers
               weight = 1,
               color = ~pal_2(ur8_2020_name)) %>%
+  addProviderTiles(providers$OpenRailwayMap) |> # Adding rotues layer
+  addProviderTiles(providers$CyclOSM) |> # Adding rotues layer
   addLegend(data = population_density,
             position = "bottomleft", 
             title = "Urban/Rural Classification",
