@@ -2,9 +2,6 @@
 
 # Create Servive map (adapted)
 
-# Originally written by Ryan Duffy (ryan.duffy@phs.scot)
-# Adapted by James Kilgour (james.kilgour@phs.scot)
-
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
