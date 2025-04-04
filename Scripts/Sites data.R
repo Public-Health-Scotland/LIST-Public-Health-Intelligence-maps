@@ -243,7 +243,9 @@ Postcode_Lookup <- rbind(
              select(postcode, datazone2011 = data_zone2011code, latitude, longitude)
   
   ) %>%  # End of rbind() call 
-  distinct() # Removing duplicate entries
+  distinct() %>% # Removing duplicate entries
+  group_by(postcode) %>% 
+  slice_head()
   
 unlink(temp)
 
