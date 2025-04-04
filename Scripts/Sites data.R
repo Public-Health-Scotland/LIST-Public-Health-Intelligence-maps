@@ -92,21 +92,25 @@ Hospital_Locations <-   get_resource(most_recent_hospital_codes_info)  %>%
 
 ## 2.5 Pharmacy locations ----
 
-most_recent_dispenser_sizes = package_show(id = "dispenser-location-contact-details", url = "https://www.opendata.nhs.scot/", as = "table")[["resources"]] %>%
+most_recent_dispenser_sites = package_show(id = "dispenser-location-contact-details", url = "https://www.opendata.nhs.scot/", as = "table")[["resources"]] %>%
   as_tibble() %>%
   select(id, name, created) %>%
   arrange(desc(created)) %>%
   filter(created == max(created)) %>%
   pull(id)
 
-Pharmacy_Locations <- get_resource(most_recent_dispenser_sizes) %>%
-  dplyr::select(location_name = DispLocationName,) %>%
-  mutate(practice_code = as.character(practice_code))
+Pharmacy_Locations <- get_resource(most_recent_dispenser_sites) %>%
+  dplyr::select(pharm_code = DispCode, pharm_name = DispLocationName, postcode = DispLocationPostcode) %>%
+  mutate(pharm_code = as.character(pharm_code))
 
 # 3. Combine Hospital Data ----
 
 Hospital_Locations_Full <- Hospital_Info %>%
-  left_join(Hospital_Locations,by=c("hosp_code"))
+  left_join(Hospital_Locations,by=c("hosp_code")) %>% 
+  # Converting Type codes into descriptive category
+  mutate(type = case_when(type == "Type 1" ~ "Emergency Department",
+                          type == "Type 2" ~ "Emergency Department",
+                          type == "Type 3" ~ "Minor Injuries Unit/Other"))
 
 # 4. Split Some Data Into Service Types ----
 
@@ -137,7 +141,7 @@ Other_Care_Services <- Care_Service_Locations %>%
 ## 4.2. Hospitals ----
 
 MIU_Locations <- Hospital_Locations_Full %>%
-  filter(type == "Minor Injury Unit or Other") 
+  filter(type == "Minor Injuries Unit/Other") 
 
 ED_Locations <- Hospital_Locations_Full %>%
   filter(type == "Emergency Department") 
@@ -168,17 +172,29 @@ Elder_Care_Locations <- Elder_Care_Services %>%
   mutate(code=as.character(code)) %>%
   mutate(source = "Opendata etc.")
 
+Other_Care_Services <- Other_Care_Services %>%
+  dplyr::select(code=care_home_number,name=care_home_number,postcode) %>%
+  mutate(service_type="Care Home") %>%
+  mutate(code=as.character(code)) %>%
+  mutate(source = "Opendata etc.")
+
+Pharmacy_Locations <- Pharmacy_Locations %>% 
+  dplyr::select(code=pharm_code,name=pharm_name,postcode) %>%
+  mutate(service_type="Pharmacy") %>%
+  mutate(code=as.character(code)) %>%
+  mutate(source = "Opendata etc.")
+
 
 # 7. Combine All Services Data ----
 
 All_Services_Locations <- rbind(GP_Locations,
                                 MIU_Locations,
                                 ED_Locations,
-                                Elder_Care_Locations)
-                                Other_Care_Services)
+                                Elder_Care_Locations,
+                                Other_Care_Services,
+                                Pharmacy_Locations)
 
 # Tidying up
-
 rm(Hospital_Locations_Full,
    Hospital_Info,
    Hospital_Locations,
@@ -193,7 +209,13 @@ rm(Hospital_Locations_Full,
    Other_Services,
    Opticians_CnS,
    Dental_Services_CnS,
-   Community_Hospitals)
+   Community_Hospitals,
+   most_recent_practice_sizes,
+   most_recent_dispenser_sites, 
+   most_recent_hospital_codes_info,
+   most_recent_care_home_data_url,
+   most_recent_hospital_info,
+   link)
 
 # 8. Fix Postcode (Remove Space) ----
 
@@ -202,23 +224,30 @@ All_Services_Locations <- All_Services_Locations %>%
 
 # 9. Attach Postcode Lookup ----
 
-Postcode_Lookup <- fs::dir_ls(
-  path = "/conf/linkage/output/lookups/Unicode/Geography/Scottish Postcode Directory",
-  regexp = "\\.parquet$"
-) |>
-  # Read in the most up to date lookup version
-  max() |>
-  arrow::read_parquet(col_select = -c(hscp2019, hscp2019name, hb2019, hb2019name))
+# Via National Records of Scotland - Postcode Index file
+# https://www.nrscotland.gov.uk/publications/scottish-postcode-directory-2025/ 
+post_code_data <- "https://www.nrscotland.gov.uk/media/dwmdsj1k/spd_postcodeindex_cut_25_1_csv.zip"
 
-DataZone_Lookup <- fs::dir_ls(
-  path = "/conf/linkage/output/lookups/Unicode/Geography/HSCP Locality",
-  regexp = "HSCP Localities_DZ11_Lookup_.+?\\.rds$"
-) |>
-  # Read in the most up to date lookup version
-  max() |>
-  readr::read_rds() |>
-  dplyr::select(datazone2011, hscp_locality, hscp2019name, hscp2019, hb2019name, hb2019) |>
-  dplyr::mutate(hscp_locality = sub("&", "and", hscp_locality, fixed = TRUE))
+temp <- tempfile() # Creating a temporary storage location for our zipped data
+download.file(post_code_data,temp) # Assigning the data available in the URL above to the URL
+Postcode_Lookup <- read_csv(unz(temp, "SmallUser.csv")) %>% # Reading in CSV postcode file
+  janitor::clean_names() %>% # Cleaning variable names
+  select(postcode, datazone2011 = data_zone2011code, latitude, longitude) # Selecting relevant columns only (because it's a very big file large)
+unlink(temp)
+
+
+DataZone_Lookup <- get_resource("d6e500c4-c1f2-4507-979a-e18855efd7a4") %>% 
+  janitor::clean_names() %>% 
+  dplyr::select(datazone2011 = data_zone, hscp_locality = sub_hscp_name, hscp, hb)
+
+
+Large_Geography_Lookup <- get_resource("944765d7-d0d9-46a0-b377-abb3de51d08e") %>% 
+  janitor::clean_names() %>% 
+  dplyr::select(hscp, hscp_name, hb, hb_name)
+
+
+# Joining data
+DataZone_Lookup <- left_join(DataZone_Lookup, Large_Geography_Lookup)
 
 Postcode_Lookup <-  Postcode_Lookup %>% 
   left_join(
@@ -228,11 +257,10 @@ Postcode_Lookup <-  Postcode_Lookup %>%
   ) 
 
 Postcode_Lookup <- Postcode_Lookup %>%
-  mutate(postcode = gsub(" ", "", pc7)) %>%
+  mutate(postcode = gsub(" ", "", postcode)) %>%
   select(
     postcode, latitude, longitude, datazone2011,
-    hscp_locality, hscp2019name, hscp2019, hb2019name, hb2019
-  ) 
+    hscp_locality, hscp2019name = hscp_name, hscp2019 = hscp, hb2019name = hb_name, hb2019 = hb) 
 
 
 All_Services_Locations <- All_Services_Locations %>%
