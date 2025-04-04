@@ -230,9 +230,21 @@ post_code_data <- "https://www.nrscotland.gov.uk/media/dwmdsj1k/spd_postcodeinde
 
 temp <- tempfile() # Creating a temporary storage location for our zipped data
 download.file(post_code_data,temp) # Assigning the data available in the URL above to the URL
-Postcode_Lookup <- read_csv(unz(temp, "SmallUser.csv")) %>% # Reading in CSV postcode file
-  janitor::clean_names() %>% # Cleaning variable names
-  select(postcode, datazone2011 = data_zone2011code, latitude, longitude) # Selecting relevant columns only (because it's a very big file large)
+Postcode_Lookup <- rbind(
+  
+  # Binding postcode CSV files together
+  
+  read_csv(unz(temp, "SmallUser.csv")) %>% # Reading in CSV postcode file 
+    janitor::clean_names() %>% # Cleaning variable names
+    select(postcode, datazone2011 = data_zone2011code, latitude, longitude), 
+  
+  read_csv(unz(temp, "LargeUser.csv")) %>% # Reading in CSV postcode file 
+             janitor::clean_names() %>% # Cleaning variable names
+             select(postcode, datazone2011 = data_zone2011code, latitude, longitude)
+  
+  ) %>%  # End of rbind() call 
+  distinct() # Removing duplicate entries
+  
 unlink(temp)
 
 
@@ -265,6 +277,8 @@ Postcode_Lookup <- Postcode_Lookup %>%
 
 All_Services_Locations <- All_Services_Locations %>%
   left_join(Postcode_Lookup,by="postcode")
+
+test_james <- All_Services_Locations
 
 
 # 10. Filter For Location Of Interest ----
