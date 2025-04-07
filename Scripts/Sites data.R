@@ -4,12 +4,19 @@
 
 # This script extracts data on primary and secondary care locations from 
 # publicly available resources and aggregates them into a consistent format
-# for maping. 
+# for mapping. 
+
+# Specifically:
+# - GP practices
+# - Care homes
+# - Hospitals (All types)
+# - Pharmacies
 
 # The main data source is opendata.nhs.scot (operated by PHS), however, it also
 # uses the Scottish Care inspectorate (careinspectorate.com) and National
 # Records of Scotland data to link service data together. The script has been
-# structured to largely function automatically. 
+# structured to largely function automatically however, some URLs may need to
+# be updated as geographic boundaries/relationships change over time.
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -17,27 +24,20 @@
 
 # 1 Housekeeping, setup, etc. ---------------------------------------------
 
-library(tidyverse)
-library(tidylog)
-library(sf)
-library(readxl)
-library(readr)
-library(leaflet)
-library(ggmap)
-library(ckanr)
-library(phsopendata)
-library(rvest)
+library(tidyverse) # General data maniupulation package
+library(tidylog) # Accompanies tidyverse
+library(phsopendata) # OpenData API
+library(ckanr) # Web scraping 
+library(rvest) # Web scraping 
 
-
-gc()
-
-# 1.2 Reference data ---- 
+gc() # Tidying environment
 
 
 # 2. Loading location data ------------------------------------------------
 
 ## 2.1. GP Data ----
 
+# Identify most recent data
 most_recent_practice_sizes = package_show(id = "gp-practice-contact-details-and-list-sizes", url = "https://www.opendata.nhs.scot/", as = "table")[["resources"]] %>%
   as_tibble() %>%
   select(id, name, created) %>%
@@ -45,14 +45,18 @@ most_recent_practice_sizes = package_show(id = "gp-practice-contact-details-and-
   filter(created == max(created)) %>%
   pull(id)
 
+# Extract most recent data
 GP_Locations <- get_resource(most_recent_practice_sizes) %>%
   dplyr::select(practice_code=PracticeCode,practice_name=GPPracticeName,postcode=Postcode) %>%
   mutate(practice_code = as.character(practice_code))
 
+# Some GP practices are registered as a dispensary site. This code helps prevent 
+# double-counting of these sites.
 pharmacy_filter <- GP_Locations$practice_code
 
 ## 2.2 . Care Home Data ----
 
+# Identify most recent data
 link = "https://www.careinspectorate.com/index.php/publications-statistics/93-public/datastore"
 
 most_recent_care_home_data_url = read_html(link) %>% 
@@ -69,12 +73,13 @@ most_recent_care_home_data_url = read_html(link) %>%
   pull(full_url) %>%
   gsub(" ","%20",.)
 
+# Extract most recent data
 Care_Service_Locations <- read_csv(paste0("https://www.careinspectorate.com",most_recent_care_home_data_url)) %>%
   dplyr::select(care_home_number=CSNumber,type=CareService,subtype=Subtype,postcode=Service_Postcode)
 
 ## 2.3. Hospital Info ----
 
-# Determines types of hospitals
+# Determines *types* of hospitals
 most_recent_hospital_info = package_show(id = "nhs-scotland-accident-emergency-sites", url = "https://www.opendata.nhs.scot/", as = "table")[["resources"]] %>%
   as_tibble() %>%
   select(id, name, created) %>%
@@ -85,10 +90,7 @@ most_recent_hospital_info = package_show(id = "nhs-scotland-accident-emergency-s
 Hospital_Info <- get_resource(most_recent_hospital_info)  %>%
   dplyr::select(hosp_code=TreatmentLocationCode,hosp_name=TreatmentLocationName,type=CurrentDepartmentType,status=Status)
 
-
-## 2.4. Hospital Location Info ----
-
-# Determines location data of hospitals
+# Determines *location* of hospitals
 most_recent_hospital_codes_info = package_show(id = "hospital-codes", url = "https://www.opendata.nhs.scot/", as = "table")[["resources"]] %>%
   as_tibble() %>%
   select(id, name, created) %>%
@@ -99,23 +101,7 @@ most_recent_hospital_codes_info = package_show(id = "hospital-codes", url = "htt
 Hospital_Locations <-   get_resource(most_recent_hospital_codes_info)  %>%
   dplyr::select(hosp_code=HospitalCode,postcode=Postcode)
 
-
-## 2.5 Pharmacy locations ----
-
-most_recent_dispenser_sites = package_show(id = "dispenser-location-contact-details", url = "https://www.opendata.nhs.scot/", as = "table")[["resources"]] %>%
-  as_tibble() %>%
-  select(id, name, created) %>%
-  arrange(desc(created)) %>%
-  filter(created == max(created)) %>%
-  pull(id)
-
-Pharmacy_Locations <- get_resource(most_recent_dispenser_sites) %>%
-  dplyr::select(pharm_code = DispCode, pharm_name = DispLocationName, postcode = DispLocationPostcode) %>%
-  mutate(pharm_code = as.character(pharm_code)) %>% 
-  filter(!(pharm_code %in% pharmacy_filter))
-
-# 3. Combine Hospital Data ----
-
+### Combining hospital data ----
 Hospital_Locations_Full <- Hospital_Info %>%
   left_join(Hospital_Locations,by=c("hosp_code")) %>% 
   # Converting Type codes into descriptive category
@@ -123,9 +109,26 @@ Hospital_Locations_Full <- Hospital_Info %>%
                           type == "Type 2" ~ "Emergency Department",
                           type == "Type 3" ~ "Minor Injuries Unit/Other"))
 
-# 4. Split Some Data Into Service Types ----
+## 2.4 Pharmacy locations ----
 
-## 4.1. Care Services ----
+# Identify most recent data
+most_recent_dispenser_sites = package_show(id = "dispenser-location-contact-details", url = "https://www.opendata.nhs.scot/", as = "table")[["resources"]] %>%
+  as_tibble() %>%
+  select(id, name, created) %>%
+  arrange(desc(created)) %>%
+  filter(created == max(created)) %>%
+  pull(id)
+
+# Extract most recent data
+Pharmacy_Locations <- get_resource(most_recent_dispenser_sites) %>%
+  dplyr::select(pharm_code = DispCode, pharm_name = DispLocationName, postcode = DispLocationPostcode) %>%
+  mutate(pharm_code = as.character(pharm_code)) %>% 
+  filter(!(pharm_code %in% pharmacy_filter)) # Removing GP practices from pharmacy data
+
+
+# 3. Split Some Data Into Service Types ----
+
+## 3.1. Care Services ----
 
 Elder_Care_Services <- Care_Service_Locations %>%
   filter(type == "Care Home Service") %>%
@@ -149,7 +152,7 @@ Other_Care_Services <- Care_Service_Locations %>%
   filter(subtype != "Older People")
 
 
-## 4.2. Hospitals ----
+## 3.2. Hospitals ----
 
 MIU_Locations <- Hospital_Locations_Full %>%
   filter(type == "Minor Injuries Unit/Other") 
@@ -157,7 +160,10 @@ MIU_Locations <- Hospital_Locations_Full %>%
 ED_Locations <- Hospital_Locations_Full %>%
   filter(type == "Emergency Department") 
 
-# 6. Prepare Data To Be Joined ----
+# 4. Prepare Data To Be Joined ----
+
+# The following code standardises the format of each data frame so we can 
+# bind them together later on into one.
 
 GP_Locations <- GP_Locations %>%
   dplyr::select(code=practice_code,name=practice_name,postcode) %>%
@@ -196,17 +202,16 @@ Pharmacy_Locations <- Pharmacy_Locations %>%
   mutate(source = "Opendata etc.")
 
 
-# 7. Combine All Services Data ----
+# 5. Combine All Services Data ----
 
 All_Services_Locations <- rbind(GP_Locations,
                                 MIU_Locations,
                                 ED_Locations,
                                 Elder_Care_Locations,
                                 Other_Care_Services,
-                                Pharmacy_Locations
-                                )
+                                Pharmacy_Locations)
 
-# Tidying up
+# Tidying environment - removing all unnecessary data frames:
 rm(Hospital_Locations_Full,
    Hospital_Info,
    Hospital_Locations,
@@ -229,7 +234,7 @@ rm(Hospital_Locations_Full,
    most_recent_hospital_info,
    link)
 
-# 8. Fix Postcode (Remove Space) ----
+# 6. Fix Postcode (Remove Space) ----
 
 All_Services_Locations <- All_Services_Locations %>%
   mutate(postcode = gsub(" ", "",postcode))
@@ -295,12 +300,12 @@ All_Services_Locations <- All_Services_Locations %>%
 test_james <- All_Services_Locations
 
 
-# 10. Filter For Location Of Interest ----
+# 7. Filter For Location Of Interest ----
 
 All_Services_Locations <- All_Services_Locations %>%
   filter_for_location(location=location)
 
-# 11. Filter For Services Of Interest ----
+# 8. Filter For Services Of Interest ----
 
 All_Services_Locations <- All_Services_Locations %>% 
   filter(!(service_type %in% services_to_exclude))
