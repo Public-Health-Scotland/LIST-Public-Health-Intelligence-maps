@@ -1,6 +1,15 @@
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-# Create Servive map (adapted)
+# Services mapping script 1 - Primary and Secondary Care locations
+
+# This script extracts data on primary and secondary care locations from 
+# publicly available resources and aggregates them into a consistent format
+# for maping. 
+
+# The main data source is opendata.nhs.scot (operated by PHS), however, it also
+# uses the Scottish Care inspectorate (careinspectorate.com) and National
+# Records of Scotland data to link service data together. The script has been
+# structured to largely function automatically. 
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -40,6 +49,7 @@ GP_Locations <- get_resource(most_recent_practice_sizes) %>%
   dplyr::select(practice_code=PracticeCode,practice_name=GPPracticeName,postcode=Postcode) %>%
   mutate(practice_code = as.character(practice_code))
 
+pharmacy_filter <- GP_Locations$practice_code
 
 ## 2.2 . Care Home Data ----
 
@@ -101,7 +111,8 @@ most_recent_dispenser_sites = package_show(id = "dispenser-location-contact-deta
 
 Pharmacy_Locations <- get_resource(most_recent_dispenser_sites) %>%
   dplyr::select(pharm_code = DispCode, pharm_name = DispLocationName, postcode = DispLocationPostcode) %>%
-  mutate(pharm_code = as.character(pharm_code))
+  mutate(pharm_code = as.character(pharm_code)) %>% 
+  filter(!(pharm_code %in% pharmacy_filter))
 
 # 3. Combine Hospital Data ----
 
@@ -192,7 +203,8 @@ All_Services_Locations <- rbind(GP_Locations,
                                 ED_Locations,
                                 Elder_Care_Locations,
                                 Other_Care_Services,
-                                Pharmacy_Locations)
+                                Pharmacy_Locations
+                                )
 
 # Tidying up
 rm(Hospital_Locations_Full,
