@@ -141,6 +141,13 @@ Dentist_Locations <- get_resource(most_recent_dentist_sites) %>%
   dplyr::select(dentist_code = Dental_Practice_Code, dentist_name = address1, postcode = pc7) %>%
   mutate(dentist_code = as.character(dentist_code))
 
+## 2.6. Other Services ----
+
+Community_Hospital_Locations <- readxl::read_xlsx("Extra sites data.xlsx") %>% 
+  dplyr::select(code, name, postcode) %>%
+  mutate(code = as.character(code))
+  
+
 
 # 3. Split Some Data Into Service Types ----
 
@@ -223,6 +230,11 @@ Dentist_Locations <- Dentist_Locations %>%
   mutate(code=as.character(code)) %>%
   mutate(source = "Opendata etc.")
 
+Community_Hospital_Locations <- Community_Hospital_Locations %>% 
+  mutate(service_type="Community hospital") %>%
+  mutate(code=as.character(code)) %>%
+  mutate(source = "Board website")
+
 
 # 5. Combine All Services Data ----
 
@@ -232,7 +244,8 @@ All_Services_Locations <- rbind(GP_Locations,
                                 Elder_Care_Locations,
                                 Other_Care_Services,
                                 Pharmacy_Locations,
-                                Dentist_Locations)
+                                Dentist_Locations,
+                                Community_Hospital_Locations)
 
 # Tidying environment - removing all unnecessary data:
 rm(most_recent_practice_sizes,
@@ -254,7 +267,8 @@ rm(most_recent_practice_sizes,
    Pharmacy_Locations,
    pharmacy_filter,
    Dentist_Locations,
-   most_recent_dentist_sites)
+   most_recent_dentist_sites,
+   Community_Hospital_Locations)
 
 # 6. Fix Postcode (Remove Space) ----
 
@@ -326,15 +340,32 @@ All_Services_Locations <- All_Services_Locations %>%
   left_join(Postcode_Lookup,by="postcode") %>% 
   filter(!(if_any(everything(), is.na))) # Removing observations with empty data
 
+
+# Tidying up
+rm(DataZone_Lookup, Large_Geography_Lookup, Postcode_Lookup)
+
 # 8. Filter For Location Of Interest ----
 
-All_Services_Locations <- All_Services_Locations %>%
-  filter_for_location(location=location)
+test <- All_Services_Locations %>%
+  filter(hb2019name == "NHS Lanarkshire")
 
-# 9. Filter For Services Of Interest ----
+pal <- colorFactor(
+  palette = c('red', 'blue', 'green', 'purple', 'orange', "grey", "black"),
+  domain = test$service_type
+)
 
-All_Services_Locations <- All_Services_Locations %>% 
-  filter(!(service_type %in% services_to_exclude))
 
+test %>% 
+  leaflet()  %>% 
+  addProviderTiles(providers$OpenStreetMap) |> 
+  # Markers for sites
+  addCircleMarkers(
+    lng = test$longitude, lat = test$latitude, group = "Sites",
+    radius = 3.5, weight = 1, opacity = 1, fillOpacity = 1, fillColor = ~pal(service_type), color = ~pal(service_type)) %>% 
+  addLegend(data = test,
+            position = "bottomleft", 
+            title = "Site Type",
+            pal = pal, 
+            values = ~service_type) 
 
 
