@@ -126,6 +126,22 @@ Pharmacy_Locations <- get_resource(most_recent_dispenser_sites) %>%
   filter(!(pharm_code %in% pharmacy_filter)) # Removing GP practices from pharmacy data
 
 
+## 2.5 Dentist locations ----
+
+# Identify most recent data
+most_recent_dentist_sites = package_show(id = "dental-practices-and-patient-registrations", url = "https://www.opendata.nhs.scot/", as = "table")[["resources"]] %>%
+  as_tibble() %>%
+  select(id, name, created) %>%
+  arrange(desc(created)) %>%
+  filter(created == max(created)) %>%
+  pull(id)
+
+# Extract most recent data
+Dentist_Locations <- get_resource(most_recent_dentist_sites) %>%
+  dplyr::select(dentist_code = Dental_Practice_Code, dentist_name = address1, postcode = pc7) %>%
+  mutate(dentist_code = as.character(dentist_code))
+
+
 # 3. Split Some Data Into Service Types ----
 
 ## 3.1. Care Services ----
@@ -201,6 +217,12 @@ Pharmacy_Locations <- Pharmacy_Locations %>%
   mutate(code=as.character(code)) %>%
   mutate(source = "Opendata etc.")
 
+Dentist_Locations <- Dentist_Locations %>% 
+  dplyr::select(code=dentist_code,name=dentist_name,postcode) %>%
+  mutate(service_type="Dentist") %>%
+  mutate(code=as.character(code)) %>%
+  mutate(source = "Opendata etc.")
+
 
 # 5. Combine All Services Data ----
 
@@ -209,37 +231,40 @@ All_Services_Locations <- rbind(GP_Locations,
                                 ED_Locations,
                                 Elder_Care_Locations,
                                 Other_Care_Services,
-                                Pharmacy_Locations)
+                                Pharmacy_Locations,
+                                Dentist_Locations)
 
-# Tidying environment - removing all unnecessary data frames:
-rm(Hospital_Locations_Full,
-   Hospital_Info,
-   Hospital_Locations,
+# Tidying environment - removing all unnecessary data:
+rm(most_recent_practice_sizes,
    GP_Locations,
-   MIU_Locations,
-   ED_Locations,
+   link,
+   most_recent_care_home_data_url,
    Care_Service_Locations,
    Elder_Care_Locations,
    Elder_Care_Services,
    Other_Care_Services,
-   Pharmacy_Locations,
-   Other_Services,
-   Opticians_CnS,
-   Dental_Services_CnS,
-   Community_Hospitals,
-   most_recent_practice_sizes,
-   most_recent_dispenser_sites, 
    most_recent_hospital_codes_info,
-   most_recent_care_home_data_url,
    most_recent_hospital_info,
-   link)
+   Hospital_Locations_Full,
+   Hospital_Info,
+   Hospital_Locations,
+   MIU_Locations,
+   ED_Locations,
+   most_recent_dispenser_sites,
+   Pharmacy_Locations,
+   pharmacy_filter,
+   Dentist_Locations,
+   most_recent_dentist_sites)
 
 # 6. Fix Postcode (Remove Space) ----
 
 All_Services_Locations <- All_Services_Locations %>%
   mutate(postcode = gsub(" ", "",postcode))
 
-# 9. Attach Postcode Lookup ----
+# 7. Attach Postcode Lookup ----
+
+# Now we need to make sure all our locations have geographic data attached.
+
 
 # Via National Records of Scotland - Postcode Index file
 # https://www.nrscotland.gov.uk/publications/scottish-postcode-directory-2025/ 
@@ -262,22 +287,23 @@ Postcode_Lookup <- rbind(
   ) %>%  # End of rbind() call 
   distinct() %>% # Removing duplicate entries
   group_by(postcode) %>% 
-  slice_head()
+  slice_head() # Removing duplicate long/lat values
   
 unlink(temp)
 
 
+# Small geography (Datazone) relationships
 DataZone_Lookup <- get_resource("d6e500c4-c1f2-4507-979a-e18855efd7a4") %>% 
   janitor::clean_names() %>% 
   dplyr::select(datazone2011 = data_zone, hscp_locality = sub_hscp_name, hscp, hb)
 
-
+# Large geography (HSCP and beyond) relationships
 Large_Geography_Lookup <- get_resource("944765d7-d0d9-46a0-b377-abb3de51d08e") %>% 
   janitor::clean_names() %>% 
   dplyr::select(hscp, hscp_name, hb, hb_name)
 
 
-# Joining data
+# Joining geographic data
 DataZone_Lookup <- left_join(DataZone_Lookup, Large_Geography_Lookup)
 
 Postcode_Lookup <-  Postcode_Lookup %>% 
@@ -287,6 +313,8 @@ Postcode_Lookup <-  Postcode_Lookup %>%
     relationship = "many-to-one"
   ) 
 
+
+# Formatting geographic data before joining with Care site data
 Postcode_Lookup <- Postcode_Lookup %>%
   mutate(postcode = gsub(" ", "", postcode)) %>%
   select(
@@ -295,17 +323,19 @@ Postcode_Lookup <- Postcode_Lookup %>%
 
 
 All_Services_Locations <- All_Services_Locations %>%
-  left_join(Postcode_Lookup,by="postcode")
+  left_join(Postcode_Lookup,by="postcode") %>% 
+  filter(!(if_any(everything(), is.na))) # Removing observations with empty data
+
 
 test_james <- All_Services_Locations
 
 
-# 7. Filter For Location Of Interest ----
+# 8. Filter For Location Of Interest ----
 
 All_Services_Locations <- All_Services_Locations %>%
   filter_for_location(location=location)
 
-# 8. Filter For Services Of Interest ----
+# 9. Filter For Services Of Interest ----
 
 All_Services_Locations <- All_Services_Locations %>% 
   filter(!(service_type %in% services_to_exclude))
