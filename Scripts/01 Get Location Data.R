@@ -346,26 +346,7 @@ rm(DataZone_Lookup, Large_Geography_Lookup, Postcode_Lookup)
 
 # 8. Filter For Location Of Interest ----
 
-test <- All_Services_Locations %>%
+All_Services_Locations <- All_Services_Locations %>%
   filter(hb2019name == "NHS Lanarkshire")
-
-pal <- colorFactor(
-  palette = c('red', 'blue', 'green', 'purple', 'orange', "grey", "black"),
-  domain = test$service_type
-)
-
-
-test %>% 
-  leaflet()  %>% 
-  addProviderTiles(providers$OpenStreetMap) |> 
-  # Markers for sites
-  addCircleMarkers(
-    lng = test$longitude, lat = test$latitude, group = "Sites",
-    radius = 3.5, weight = 1, opacity = 1, fillOpacity = 1, fillColor = ~pal(service_type), color = ~pal(service_type)) %>% 
-  addLegend(data = test,
-            position = "bottomleft", 
-            title = "Site Type",
-            pal = pal, 
-            values = ~service_type) 
 
 
