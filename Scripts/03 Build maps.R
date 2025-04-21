@@ -34,9 +34,6 @@ housing_land <- read_sf("Housing Land Supply/HLAA2019_GCV.shp") %>%
 
 # Population density & urbanity data
 # read in datazone shapefiles
-temp <- tempfile() # Creating a temporary storage location for our zipped data
-download.file(data_zone,temp) # Assigning the data available in the URL above to the URL
-
 
 # Create temp files
 temp <- tempfile()
