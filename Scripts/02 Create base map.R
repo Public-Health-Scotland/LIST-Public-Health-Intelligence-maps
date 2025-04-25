@@ -55,7 +55,10 @@ logos <- awesomeIconList(
 base_map <- All_Services_Locations %>% 
   # Load map
   leaflet()  %>%
-  addProviderTiles(providers$Stadia.AlidadeSmooth) %>% 
+  addProviderTiles(
+    "OpenStreetMap.Mapnik",
+    options = providerTileOptions(opacity = 0.5)
+  ) %>% 
   # Set default area & zoom
   setView(lng = -3.99, lat = 55.74, zoom = 9) %>% 
   # Add train network
